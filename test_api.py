@@ -68,6 +68,9 @@ def encode_file(path):
 def main():
     parser = argparse.ArgumentParser(description="Qwen Rapid-AIO API 测试")
     parser.add_argument("--json", "-j", help="输入 JSON 文件（含 input 对象或整体 {\"input\":{...}}）")
+    parser.add_argument("--workflow", "-w", help="通用模式：ComfyUI API 格式工作流 JSON 文件")
+    parser.add_argument("--image-name", default="input.png", help="通用模式下输入图在 ComfyUI 的文件名（要与工作流 LoadImage 一致）")
+    parser.add_argument("--output-node", help="通用模式：只取指定节点的输出图")
     parser.add_argument("--mode", choices=["url", "base64"], default="url", help="输入方式")
     parser.add_argument("--image-url", help="测试图片 URL")
     parser.add_argument("--image-file", help="本地图片文件（base64 模式）")
@@ -90,6 +93,29 @@ def main():
         with open(args.json, encoding="utf-8") as f:
             data = json.load(f)
         input_payload = data.get("input", data)
+    elif args.workflow:
+        # 通用模式：把工作流文件读进 input.workflow
+        with open(args.workflow, encoding="utf-8") as f:
+            wf = json.load(f)
+        # 兼容：文件可能是整体 {"input": {...}}、{"workflow": {...}}、或纯工作流图
+        if isinstance(wf, dict) and isinstance(wf.get("input"), dict) and "workflow" in wf["input"]:
+            input_payload = wf["input"]
+        elif isinstance(wf, dict) and "workflow" in wf:
+            input_payload = wf
+        else:
+            input_payload = {"workflow": wf}
+        # 若工作流文件里没带 images，则用命令行的图片补上
+        if not input_payload.get("images"):
+            if args.mode == "url":
+                url = args.image_url or os.getenv("TEST_IMAGE_URL")
+                if url:
+                    input_payload["images"] = [{"name": args.image_name, "image_url": url}]
+            elif args.image_file:
+                input_payload["images"] = [
+                    {"name": args.image_name, "image_base64": encode_file(args.image_file)}
+                ]
+        if args.output_node:
+            input_payload["output_node"] = args.output_node
     else:
         input_payload = {
             "prompt": args.prompt,
@@ -113,11 +139,19 @@ def main():
             input_payload["lora"] = args.lora
             input_payload["lora_strength"] = args.lora_strength
 
-    # 打印（截断 base64）
+    # 打印（截断 base64 / workflow）
     printable = dict(input_payload)
     for k in ["image_base64", "image_base64_2", "image_base64_3"]:
         if k in printable and isinstance(printable[k], str):
             printable[k] = f"<base64:{len(printable[k])} chars>"
+    if isinstance(printable.get("workflow"), dict):
+        printable["workflow"] = f"<workflow: {len(printable['workflow'])} 个节点>"
+    if isinstance(printable.get("images"), list):
+        printable["images"] = [
+            {**{kk: vv for kk, vv in img.items() if kk != "image_base64"},
+             **({"image_base64": f"<base64:{len(img['image_base64'])} chars>"} if isinstance(img.get("image_base64"), str) else {})}
+            for img in printable["images"] if isinstance(img, dict)
+        ]
     print("Input:", json.dumps(printable, indent=2, ensure_ascii=False))
     print("\n调用 RunPod /runsync ...")
 
@@ -136,6 +170,24 @@ def main():
     if isinstance(output, dict) and "error" in output:
         print("Error:", output["error"])
         sys.exit(1)
+
+    # 通用模式：output.images 为多张图，逐张保存
+    if isinstance(output, dict) and isinstance(output.get("images"), list) and output["images"]:
+        out_p = Path(args.out)
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+        stem, suffix = out_p.stem, (out_p.suffix or ".png")
+        saved_paths = []
+        for i, item in enumerate(output["images"]):
+            b64 = item.get("image") if isinstance(item, dict) else item
+            if not b64:
+                continue
+            p = out_p if len(output["images"]) == 1 else out_p.with_name(f"{stem}_{i}{suffix}")
+            p.write_bytes(base64.b64decode(b64))
+            saved_paths.append(str(p))
+        print(f"已保存 {len(saved_paths)} 张:", ", ".join(saved_paths))
+        sys.exit(0)
+
+    # 内置模式 / 单图：output.image
     if isinstance(output, dict) and "image" in output:
         raw = base64.b64decode(output["image"])
         out_p = Path(args.out)

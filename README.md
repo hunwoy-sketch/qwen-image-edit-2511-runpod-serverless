@@ -178,7 +178,15 @@ python test_api.py --mode base64 --image-file ./input.png --prompt "remove backg
 
 # 直接用 JSON 文件
 python test_api.py --json example_request.json
+
+# 通用模式：传入任意 ComfyUI API 工作流
+python test_api.py --json example_request_workflow.json
+# 或用工作流文件 + 单独指定输入图（--image-name 要和工作流里 LoadImage 的文件名一致）
+python test_api.py --workflow workflow/qwen_rapid_aio_api.json \
+  --image-url "https://example.com/ref.jpg" --image-name input.png --output-node 6
 ```
+
+> 通用模式若有多张输出图，会保存成 `out_test_0.png`、`out_test_1.png` ...
 
 ## 致谢
 
