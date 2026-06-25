@@ -8,11 +8,16 @@
 
 | 内容 | 存放位置 | 原因 |
 | --- | --- | --- |
-| 主模型 `Qwen-Rapid-AIO-NSFW-v23.safetensors`（AIO，含 MODEL/CLIP/VAE） | **烧进镜像**（Container Disk） | 冷启动快，启动几秒内完成加载 |
+| 主模型 `Qwen-Rapid-AIO-NSFW-v23.safetensors`（AIO，含 MODEL/CLIP/VAE，~28GB） | **Network Volume** `/runpod-volume/checkpoints` | 避免烧入镜像导致 RunPod Hub 构建超时（30 分钟上限） |
 | LoRA（几百 MB，经常更换） | **Network Volume** `/runpod-volume/loras` | 随时增删，加载稍慢但可接受 |
 | 推理临时输出 | **Container Disk 的 `/tmp`** | 用完即丢，无需持久化 |
 
-ComfyUI 通过 `extra_model_paths.yaml` 把 `/runpod-volume/loras` 加入 LoRA 搜索路径，`entrypoint.sh` 再做一次软链兜底。
+ComfyUI 通过 `extra_model_paths.yaml` 把 `/runpod-volume` 的 `checkpoints`、`loras` 加入搜索路径，`entrypoint.sh` 再做一次软链兜底。
+
+> 注：早期版本把主模型烧进镜像以加快冷启动，但 RunPod Hub 构建有 30 分钟硬上限，
+> 下载 ~28GB 模型会超时失败。现改为放 Network Volume。
+> 若你坚持要"烧入镜像 + 快冷启动"，请在本地 `docker build` 后推送镜像（本地构建无时间限制），
+> 再把 `setup_network_volume.sh` 里的主模型下载段删掉即可。
 
 ## 目录结构
 
@@ -34,23 +39,25 @@ runpod-serverless/
 
 ## 部署步骤
 
-### 1. 准备 Network Volume（放 LoRA）
+### 1. 准备 Network Volume（放主模型 + LoRA）
 
-1. 在 RunPod 创建一个 Network Volume。
+1. 在 RunPod 创建一个 Network Volume（建议 ≥ 50GB，主模型约 28GB + LoRA）。
 2. 起一个挂载了该卷的 Pod（默认挂载点 `/workspace`），在终端运行：
    ```bash
    VOLUME_DIR=/workspace bash setup_network_volume.sh
    ```
-   脚本会把 9 个 LoRA 下载到卷的 `loras/` 目录。Serverless 运行时该卷挂载在 `/runpod-volume`，内容一致。
+   脚本会用 `hf_transfer` 多线程下载主模型到卷的 `checkpoints/`，再下载 9 个 LoRA 到 `loras/`。Serverless 运行时该卷挂载在 `/runpod-volume`，内容一致。
 
 ### 2. 构建并推送镜像
+
+镜像只含 ComfyUI + 节点，**不含模型**，构建很快（几分钟）：
 
 ```bash
 docker build -t <your-registry>/qwen-rapid-aio:latest .
 docker push <your-registry>/qwen-rapid-aio:latest
 ```
 
-> 主模型在构建时下载并烧进镜像（约 14GB），镜像较大但冷启动快。
+> 也可以直接用 RunPod Hub 从这个 GitHub 仓库自动构建（不再会超时）。
 
 ### 3. 创建 Serverless 端点
 

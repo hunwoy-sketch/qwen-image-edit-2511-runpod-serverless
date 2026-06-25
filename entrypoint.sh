@@ -26,6 +26,29 @@ export CUDA_VISIBLE_DEVICES=0
 export FORCE_CUDA=1
 
 # -----------------------------------------------------------------------------
+# 接入 Network Volume 的主模型（checkpoints）
+#   serverless：卷挂载在 /runpod-volume
+#   extra_model_paths.yaml 已把 /runpod-volume/checkpoints 接入 ComfyUI，
+#   这里再做一次软链兜底，并校验主模型是否存在。
+# -----------------------------------------------------------------------------
+VOLUME_CKPTS="/runpod-volume/checkpoints"
+if [ -d "$VOLUME_CKPTS" ]; then
+    echo "===== 检测到 Network Volume checkpoints 目录: $VOLUME_CKPTS ====="
+    ls -1 "$VOLUME_CKPTS" 2>/dev/null | head -n 20 || true
+    mkdir -p /ComfyUI/models/checkpoints
+    for f in "$VOLUME_CKPTS"/*; do
+        [ -e "$f" ] || continue
+        name=$(basename "$f")
+        target="/ComfyUI/models/checkpoints/$name"
+        if [ ! -e "$target" ]; then
+            ln -s "$f" "$target"
+        fi
+    done
+else
+    echo "警告：未发现 $VOLUME_CKPTS。请先运行 setup_network_volume.sh 下载主模型到卷。"
+fi
+
+# -----------------------------------------------------------------------------
 # 接入 Network Volume 的 LoRA
 #   serverless：卷挂载在 /runpod-volume
 #   优先用 extra_model_paths.yaml（Dockerfile 已拷入），这里再做一次软链兜底，

@@ -2,9 +2,13 @@
 # Qwen-Image-Edit-2511 Rapid-AIO —— RunPod Serverless 镜像
 #
 # 架构：
-#   主模型（AIO checkpoint，~14GB）  → 烧进镜像（Container Disk），冷启动快
+#   主模型（AIO checkpoint，~28GB）  → Network Volume（/runpod-volume/checkpoints）
 #   LoRA（几百 MB，经常换）          → Network Volume（/runpod-volume/loras）
 #   推理临时输出                      → Container Disk 的 /tmp，用完即丢
+#
+# 说明：主模型不烧进镜像。RunPod Hub 构建有 30 分钟上限，烧入 28GB 模型会超时；
+#       改为构建时只装 ComfyUI + 节点（几分钟完成），模型放卷里运行时加载。
+#       若需"冷启动更快"的烧入方案，请在本地 docker build 后推送镜像（无时间限制）。
 # =============================================================================
 FROM wlsdml1114/multitalk-base:1.7 AS runtime
 
@@ -37,14 +41,11 @@ RUN cd /ComfyUI/custom_nodes/ && \
 RUN mkdir -p /ComfyUI/models/checkpoints /ComfyUI/models/loras /ComfyUI/input
 
 # =============================================================================
-# 主模型：烧进镜像（Container Disk）
-#   Qwen-Rapid-AIO-NSFW-v23.safetensors —— AIO checkpoint，含 MODEL/CLIP/VAE
-#   来源：https://huggingface.co/Phr00t/Qwen-Image-Edit-Rapid-AIO
+# 主模型不在此烧入镜像（见文件头说明）。
+#   Qwen-Rapid-AIO-NSFW-v23.safetensors（AIO，含 MODEL/CLIP/VAE，~28GB）
+#   请用 setup_network_volume.sh 预先下载到 Network Volume 的 checkpoints/ 目录，
+#   运行时通过 extra_model_paths.yaml + entrypoint 软链接接入 ComfyUI。
 # =============================================================================
-ENV HF_HUB_ENABLE_HF_TRANSFER=1
-RUN wget -q --show-progress \
-    https://huggingface.co/Phr00t/Qwen-Image-Edit-Rapid-AIO/resolve/main/v23/Qwen-Rapid-AIO-NSFW-v23.safetensors \
-    -O /ComfyUI/models/checkpoints/Qwen-Rapid-AIO-NSFW-v23.safetensors
 
 # ---- 项目文件 ----
 COPY . /workspace/

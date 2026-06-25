@@ -12,14 +12,15 @@
 #      （serverless 运行时该卷会挂载在 /runpod-volume，目录内容相同）
 #
 # 架构说明：
-#   主模型（AIO checkpoint）已烧进镜像，无需放卷。
-#   本脚本只负责经常更换的 LoRA。
+#   主模型（AIO checkpoint，~28GB）与 LoRA 都放卷里。
+#   主模型用 huggingface_hub + hf_transfer 多线程下载（比 wget 快很多）。
 # =============================================================================
 set -e
 
 # 卷在 Pod 中的挂载点（serverless 时为 /runpod-volume，二者内容一致）
 VOLUME_DIR="${VOLUME_DIR:-/workspace}"
 LORAS_DIR="$VOLUME_DIR/loras"
+CKPT_DIR="$VOLUME_DIR/checkpoints"
 
 HF_BASE="https://huggingface.co"
 
@@ -45,6 +46,33 @@ download() {
     fi
 }
 
+# =============================================================================
+# 1. 主模型（AIO checkpoint）→ checkpoints/
+#    用 hf_transfer 多线程下载，避免单线程 wget 被限速。
+# =============================================================================
+mkdir -p "$CKPT_DIR"
+info "Checkpoint 下载目录：$CKPT_DIR"
+
+CKPT_NAME="Qwen-Rapid-AIO-NSFW-v23.safetensors"
+if [[ -f "$CKPT_DIR/$CKPT_NAME" ]]; then
+    warn "已存在，跳过主模型：$CKPT_NAME"
+else
+    info "下载主模型（~28GB，使用 hf_transfer 加速）：$CKPT_NAME"
+    pip install -q -U "huggingface_hub[hf_transfer]" 2>/dev/null || true
+    HF_HUB_ENABLE_HF_TRANSFER=1 hf download \
+        Phr00t/Qwen-Image-Edit-Rapid-AIO \
+        v23/Qwen-Rapid-AIO-NSFW-v23.safetensors \
+        --local-dir "$VOLUME_DIR/.hf_ckpt_tmp"
+    # hf download 会保留 v23/ 子目录，移动到 checkpoints 根目录
+    mv "$VOLUME_DIR/.hf_ckpt_tmp/v23/$CKPT_NAME" "$CKPT_DIR/$CKPT_NAME"
+    rm -rf "$VOLUME_DIR/.hf_ckpt_tmp"
+    info "完成主模型：$CKPT_NAME"
+fi
+echo ""
+
+# =============================================================================
+# 2. LoRA → loras/
+# =============================================================================
 mkdir -p "$LORAS_DIR"
 info "LoRA 下载目录：$LORAS_DIR"
 echo ""
@@ -95,6 +123,8 @@ download \
     "$LORAS_DIR/Qwen4Play_v2.safetensors"
 
 echo ""
-info "===== 全部 LoRA 下载完成 ====="
+info "===== 全部下载完成 ====="
+info "卷内主模型：$CKPT_DIR/$CKPT_NAME"
 info "卷内 LoRA 目录：$LORAS_DIR"
-warn "Serverless 运行时该卷挂载在 /runpod-volume，LoRA 路径为 /runpod-volume/loras"
+warn "Serverless 运行时该卷挂载在 /runpod-volume："
+warn "  主模型 → /runpod-volume/checkpoints   LoRA → /runpod-volume/loras"
