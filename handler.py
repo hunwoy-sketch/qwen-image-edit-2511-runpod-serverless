@@ -7,6 +7,7 @@ import uuid
 import logging
 import urllib.request
 import urllib.parse
+import urllib.error
 import binascii
 import subprocess
 import time
@@ -97,7 +98,13 @@ def queue_prompt(prompt):
     payload = {"prompt": prompt, "client_id": client_id}
     data = json.dumps(payload).encode('utf-8')
     req = urllib.request.Request(url, data=data)
-    return json.loads(urllib.request.urlopen(req).read())
+    try:
+        return json.loads(urllib.request.urlopen(req).read())
+    except urllib.error.HTTPError as e:
+        # ComfyUI 校验失败时会在响应体里给出具体原因（缺模型/缺节点等）
+        body = e.read().decode('utf-8', 'ignore')
+        logger.error(f"ComfyUI 拒绝工作流 (HTTP {e.code}): {body}")
+        raise RuntimeError(f"ComfyUI 拒绝工作流 (HTTP {e.code}): {body}")
 
 
 def get_image(filename, subfolder, folder_type):
@@ -263,12 +270,100 @@ def connect_ws(max_attempts=36):
 
 
 # ---------------------------------------------------------------------------
+# 通用模式：直接接收 ComfyUI API 格式工作流
+# ---------------------------------------------------------------------------
+def save_named_images(images):
+    """保存 images 数组到 ComfyUI input 目录。
+
+    images: [{"name": "input.png", "image_url"/"image_base64"/"image_path": ...}]
+    name 要与工作流里 LoadImage 节点的文件名一致；未给 name 则自动命名。
+    返回已保存的文件名列表。
+    """
+    os.makedirs(COMFY_INPUT_DIR, exist_ok=True)
+    saved = []
+    for i, item in enumerate(images, start=1):
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name") or f"input_{i}_{uuid.uuid4().hex}.png"
+        dest = os.path.abspath(os.path.join(COMFY_INPUT_DIR, name))
+        if item.get("image_path"):
+            src = item["image_path"]
+            if not os.path.exists(src):
+                raise Exception(f"找不到图片路径: {src}")
+            with open(src, 'rb') as rf, open(dest, 'wb') as wf:
+                wf.write(rf.read())
+        elif item.get("image_url"):
+            download_file_from_url(item["image_url"], dest)
+        elif item.get("image_base64"):
+            save_base64_to_file(item["image_base64"], dest)
+        else:
+            logger.warning(f"images[{i}] 未提供 image_url/image_base64/image_path，跳过")
+            continue
+        saved.append(name)
+    return saved
+
+
+def run_generic_workflow(job_input):
+    """通用模式：原样提交客户端传入的 ComfyUI API 工作流。"""
+    workflow = job_input["workflow"]
+    if isinstance(workflow, str):
+        try:
+            workflow = json.loads(workflow)
+        except json.JSONDecodeError as e:
+            return {"error": f"workflow 不是合法 JSON: {e}"}
+    if not isinstance(workflow, dict):
+        return {"error": "workflow 必须是 ComfyUI API 格式（节点 ID -> 节点 的对象）"}
+
+    # 落地输入图片（供工作流内 LoadImage 节点按文件名读取）
+    try:
+        saved = save_named_images(job_input.get("images", []) or [])
+    except Exception as e:
+        return {"error": f"输入图片处理失败: {e}"}
+
+    wait_for_comfy_http()
+    ws = connect_ws()
+    try:
+        outputs = get_images(ws, workflow)
+    except RuntimeError as e:
+        return {"error": str(e), "saved_inputs": saved}
+    finally:
+        ws.close()
+
+    # 整理所有输出节点的图片
+    result_images = []
+    for node_id, imgs in outputs.items():
+        for b64 in imgs:
+            result_images.append({"node_id": node_id, "image": b64})
+
+    if not result_images:
+        return {"error": "工作流执行完成但没有图片输出。", "saved_inputs": saved}
+
+    # 可选：只返回指定节点的输出
+    output_node = job_input.get("output_node")
+    if output_node is not None:
+        filtered = [x for x in result_images if x["node_id"] == str(output_node)]
+        if filtered:
+            result_images = filtered
+
+    return {
+        "images": result_images,            # 全部输出
+        "image": result_images[0]["image"],  # 便捷：第一张
+        "saved_inputs": saved,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Handler
 # ---------------------------------------------------------------------------
 def handler(job):
     job_input = job.get("input", {})
     logger.info(f"收到任务输入键: {list(job_input.keys())}")
 
+    # ---- 通用模式：客户端直接传入 ComfyUI API 工作流，支持任意工作流 ----
+    if job_input.get("workflow"):
+        return run_generic_workflow(job_input)
+
+    # ---- 兼容模式：使用内置 Qwen-Rapid-AIO 工作流 + 便捷参数 ----
     # ---- 1) 收集 1~3 张输入图片 ----
     image_files = []
     for index, suffix in enumerate(["", "_2", "_3"], start=1):
@@ -348,6 +443,8 @@ def handler(job):
     ws = connect_ws()
     try:
         images = get_images(ws, prompt)
+    except RuntimeError as e:
+        return {"error": str(e)}
     finally:
         ws.close()
 

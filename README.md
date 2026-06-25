@@ -126,6 +126,44 @@ docker push <your-registry>/qwen-rapid-aio:latest
 }
 ```
 
+## 通用模式：传入任意 ComfyUI 工作流（多工作流）
+
+除了上面的内置 Qwen 便捷模式，端点还支持**直接传入任意 ComfyUI API 格式工作流**，一个端点即可跑多种工作流。只要 `input` 里带了 `workflow` 字段，就走通用模式。
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `workflow` | object/string | 是 | 完整的 ComfyUI **API 格式**工作流（节点 ID → 节点）。在 ComfyUI 界面用 `Workflow → Export (API)` 导出 |
+| `images` | array | 否 | 输入图数组，每项 `{"name", "image_url"/"image_base64"/"image_path"}`；`name` 要与工作流里 `LoadImage` 节点填的文件名一致 |
+| `output_node` | string | 否 | 只返回指定节点的输出图；不填则返回所有输出节点 |
+
+请求示例（另见 `example_request_workflow.json`）：
+
+```json
+{
+  "input": {
+    "workflow": { "1": { "class_type": "CheckpointLoaderSimple", "inputs": { "ckpt_name": "Qwen-Rapid-AIO-NSFW-v23.safetensors" } }, "7": { "class_type": "LoadImage", "inputs": { "image": "input.png" } }, "...": "完整工作流" },
+    "images": [
+      { "name": "input.png", "image_url": "https://example.com/ref.jpg" }
+    ]
+  }
+}
+```
+
+输出：
+
+```json
+{
+  "images": [ { "node_id": "6", "image": "<base64 png>" } ],
+  "image": "<base64 png>",
+  "saved_inputs": ["input.png"]
+}
+```
+
+> 限制：
+> 1. 工作流用到的自定义节点必须已装进镜像（当前有 ComfyUI-Manager、rgthree-comfy）。需要更多节点就改 `Dockerfile` 加 `git clone`。
+> 2. 工作流引用的 checkpoint / LoRA 必须已在 Network Volume 里。
+> 3. 若工作流校验失败（缺模型/缺节点），返回的 `error` 会带上 ComfyUI 的具体原因。
+
 ## 本地测试
 
 ```bash
