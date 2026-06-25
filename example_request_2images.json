@@ -1,0 +1,15 @@
+{
+  "input": {
+    "prompt": "blend subject from picture 1 and picture 2, cinematic lighting",
+    "image_url": "https://example.com/img_a.jpg",
+    "image_url_2": "https://example.com/img_b.jpg",
+    "seed": 7777,
+    "width": 1024,
+    "height": 1024,
+    "steps": 4,
+    "loras": [
+      { "on": true, "lora": "qwen_MCNL_v1.0.safetensors", "strength": 1.0 },
+      { "on": true, "lora": "Meta4.safetensors", "strength": 0.8 }
+    ]
+  }
+}

@@ -1,0 +1,179 @@
+{
+  "1": {
+    "inputs": {
+      "ckpt_name": "Qwen-Rapid-AIO-NSFW-v23.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Load Checkpoint (主模型 AIO)"
+    }
+  },
+  "10": {
+    "inputs": {
+      "PowerLoraLoaderHeaderWidget": {
+        "type": "PowerLoraLoaderHeaderWidget"
+      },
+      "lora_1": {
+        "on": true,
+        "lora": "qwen_MCNL_v1.0.safetensors",
+        "strength": 1.0,
+        "strengthTwo": null
+      },
+      "lora_2": {
+        "on": false,
+        "lora": "Qwen4Play-2512.1_e10.safetensors",
+        "strength": 1.0,
+        "strengthTwo": null
+      },
+      "lora_3": {
+        "on": false,
+        "lora": "Meta4.safetensors",
+        "strength": 1.0,
+        "strengthTwo": null
+      },
+      "lora_4": {
+        "on": false,
+        "lora": "bfs_v2_head_000007000.safetensors",
+        "strength": 1.0,
+        "strengthTwo": null
+      },
+      "lora_5": {
+        "on": false,
+        "lora": "GiorgioV_Qwen4Play-2512.1_e10.safetensors",
+        "strength": 0.8,
+        "strengthTwo": null
+      },
+      "lora_6": {
+        "on": false,
+        "lora": "qwen_image_edit_remove-clothing_v1.0.safetensors",
+        "strength": 1.0,
+        "strengthTwo": null
+      },
+      "lora_7": {
+        "on": false,
+        "lora": "Qwen-Image-Edit-2511-Object-Remover-v2-9200.safetensors",
+        "strength": 0.7,
+        "strengthTwo": null
+      },
+      "lora_8": {
+        "on": false,
+        "lora": "qe2511_consis_alpha_patched.safetensors",
+        "strength": 1.0,
+        "strengthTwo": null
+      },
+      "lora_9": {
+        "on": false,
+        "lora": "Qwen4Play_v2.safetensors",
+        "strength": 1.0,
+        "strengthTwo": null
+      },
+      "model": ["1", 0],
+      "clip": ["1", 1]
+    },
+    "class_type": "Power Lora Loader (rgthree)",
+    "_meta": {
+      "title": "Qwen LoRAs"
+    }
+  },
+  "3": {
+    "inputs": {
+      "prompt": "Put the woman holding a balloon next to the ninja in the hallway.",
+      "clip": ["10", 1],
+      "vae": ["1", 2],
+      "image1": ["7", 0],
+      "image2": ["8", 0],
+      "image3": ["11", 0]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncodeQwenImageEditPlus Input Prompt"
+    }
+  },
+  "4": {
+    "inputs": {
+      "prompt": "",
+      "clip": ["10", 1],
+      "vae": ["1", 2]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncodeQwenImageEditPlus Negative"
+    }
+  },
+  "2": {
+    "inputs": {
+      "seed": 65454653,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "sa_solver",
+      "scheduler": "beta",
+      "denoise": 1,
+      "model": ["10", 0],
+      "positive": ["3", 0],
+      "negative": ["4", 0],
+      "latent_image": ["9", 0]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "9": {
+    "inputs": {
+      "width": 768,
+      "height": 768,
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": {
+      "title": "Final Image Size"
+    }
+  },
+  "5": {
+    "inputs": {
+      "samples": ["2", 0],
+      "vae": ["1", 2]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "6": {
+    "inputs": {
+      "filename_prefix": "QwenRapidAIO",
+      "images": ["5", 0]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "7": {
+    "inputs": {
+      "image": "input_image_1.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "图片1 · Image 1（必选）"
+    }
+  },
+  "8": {
+    "inputs": {
+      "image": "input_image_2.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "图片2 · Image 2（可选）"
+    }
+  },
+  "11": {
+    "inputs": {
+      "image": "input_image_3.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "图片3 · Image 3（可选）"
+    }
+  }
+}

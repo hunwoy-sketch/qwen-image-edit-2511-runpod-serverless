@@ -1,0 +1,14 @@
+{
+  "input": {
+    "prompt": "Put the woman holding a balloon next to the ninja in the hallway.",
+    "image_url": "https://example.com/your-reference-image.jpg",
+    "seed": 65454653,
+    "width": 768,
+    "height": 768,
+    "steps": 4,
+    "cfg": 1,
+    "loras": [
+      { "on": true, "lora": "qwen_MCNL_v1.0.safetensors", "strength": 1.0 }
+    ]
+  }
+}

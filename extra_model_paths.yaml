@@ -1,0 +1,12 @@
+# ComfyUI 额外模型搜索路径
+# 将 RunPod Network Volume（serverless 下挂载在 /runpod-volume）中的 LoRA 目录
+# 加入 ComfyUI 的 loras 搜索路径，与镜像内置目录共存。
+#
+# 约定卷内目录结构：
+#   /runpod-volume/loras/*.safetensors
+#
+# 如卷挂载点不同（如 Pod 模式下为 /workspace），可自行追加段落。
+runpod_volume:
+  base_path: /runpod-volume/
+  loras: loras/
+  checkpoints: checkpoints/

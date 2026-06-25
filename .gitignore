@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 本地环境变量（含真实密钥）
+test.env
+.env
+
+# 系统文件
+.DS_Store
+
+# 临时/输出
+*.log
+output/
+tmp/

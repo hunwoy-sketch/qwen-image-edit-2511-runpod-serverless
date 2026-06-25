@@ -1,0 +1,16 @@
+{
+  "title": "Qwen-Image-Edit-2511 Rapid-AIO",
+  "description": "基于 Qwen-Rapid-AIO.json 工作流的图片编辑 Serverless（ComfyUI）。主模型烧进镜像，LoRA 走 Network Volume，支持 1~3 张输入图、prompt 与可切换 LoRA。",
+  "type": "serverless",
+  "category": "image",
+  "iconUrl": "https://github.com/wlsdml1114/Engui_Studio/blob/main/assets/logo.png?raw=true",
+  "config": {
+    "runsOn": "GPU",
+    "containerDiskInGb": 60,
+    "gpuCount": 1,
+    "gpuIds": "ADA_24,ADA_32_PRO",
+    "allowedCudaVersions": [
+      "12.8"
+    ]
+  }
+}
