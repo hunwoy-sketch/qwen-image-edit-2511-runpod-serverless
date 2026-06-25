@@ -67,6 +67,8 @@ docker push <your-registry>/qwen-rapid-aio:latest
 
 ## API
 
+> 完整接口说明见 [API.md](API.md)（鉴权、`/run` 与 `/runsync`、两种模式、错误处理、curl/Python 示例）。
+
 ### 输入 `input`
 
 | 参数 | 类型 | 必填 | 默认 | 说明 |
